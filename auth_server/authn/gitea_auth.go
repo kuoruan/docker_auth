@@ -29,7 +29,6 @@ import (
 type GiteaAuthConfig struct {
 	ApiUri      string        `yaml:"api_uri,omitempty"`
 	HTTPTimeout time.Duration `yaml:"http_timeout,omitempty"`
-	TokenDB     string        `yaml:"token_db,omitempty"`
 }
 
 type GiteaAuth struct {
