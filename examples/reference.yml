@@ -162,6 +162,16 @@ github_auth:
   # Set an URL to display in the `docker login` command when succesfully authenticated. Optional.
   registry_url: localhost:5000
 
+# Gitea authentication.
+# This uses gitea's basic authentication to validate credentials and returns the
+# assigned organization as projects.
+gitea_auth:
+  # The Gitea API URI
+  # Includes the protocol, without trailing slash. - defaults to: https://gitea.com/api
+  api_uri: https://localhost:3000/api
+  # How long to wait when talking to Gitea servers. Optional.
+  http_timeout: "10s"
+
 # OpenID Connect authentication
 # ==! NB: DO NOT ENTER YOUR OIDC PASSWORD AT "docker login". IT WILL NOT WORK.
 # Instead, Auth server maintains a database of OIDC authentication tokens.
