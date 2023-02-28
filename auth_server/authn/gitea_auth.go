@@ -24,16 +24,20 @@ import (
 	"time"
 
 	"github.com/cesanta/docker_auth/auth_server/api"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type GiteaAuthConfig struct {
-	ApiUri      string        `yaml:"api_uri,omitempty"`
-	HTTPTimeout time.Duration `yaml:"http_timeout,omitempty"`
+	ApiUri          string        `yaml:"api_uri,omitempty"`
+	TokenDB         string        `yaml:"token_db,omitempty"`
+	HTTPTimeout     time.Duration `yaml:"http_timeout,omitempty"`
+	RevalidateAfter time.Duration `yaml:"revalidate_after,omitempty"`
 }
 
 type GiteaAuth struct {
 	config *GiteaAuthConfig
 	client *http.Client
+	db     TokenDB
 }
 
 type GiteaOrganization struct {
@@ -49,9 +53,15 @@ type GiteaOrganization struct {
 }
 
 func NewGiteaAuth(c *GiteaAuthConfig) (*GiteaAuth, error) {
+	db, err := NewTokenDB(c.TokenDB)
+	if err != nil {
+		return nil, err
+	}
+
 	return &GiteaAuth{
 		config: c,
 		client: &http.Client{Timeout: 10 * time.Second},
+		db:     db,
 	}, nil
 }
 
@@ -98,14 +108,64 @@ func (gta *GiteaAuth) fetchUserOrgs(user string, password string) ([]*GiteaOrgan
 	return orgs, nil
 }
 
+func (gta *GiteaAuth) getValidToken(user string, password api.PasswordString) (*TokenDBValue, error) {
+	userPasswd := gta.getUserToken(user, password)
+
+	dbv, err := gta.db.GetValue(user)
+	if err != nil {
+		return nil, err
+	}
+
+	if dbv == nil {
+		return nil, api.NoMatch
+	}
+
+	if err = bcrypt.CompareHashAndPassword([]byte(dbv.AccessToken), []byte(userPasswd)); err != nil {
+		return nil, api.WrongPass
+	}
+
+	if time.Now().After(dbv.ValidUntil) {
+		return nil, ExpiredToken
+	}
+
+	return dbv, nil
+}
+
+func (gta *GiteaAuth) storeToken(user string, password api.PasswordString, labels api.Labels) error {
+	userPasswd := gta.getUserToken(user, password)
+
+	dph, err := bcrypt.GenerateFromPassword([]byte(userPasswd), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("could not hash password: %s", err)
+	}
+
+	v := &TokenDBValue{
+		TokenType:   "Basic",
+		AccessToken: string(dph),
+		ValidUntil:  time.Now().Add(gta.config.RevalidateAfter),
+		Labels:      labels,
+	}
+
+	// do not update password, it's not used
+	if _, err := gta.db.StoreToken(user, v, false); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (gta *GiteaAuth) getUserToken(user string, password api.PasswordString) string {
+	return fmt.Sprintf("%s:%s", user, string(password))
+}
+
 func (gta *GiteaAuth) Authenticate(user string, password api.PasswordString) (bool, api.Labels, error) {
+	if dbv, err := gta.getValidToken(user, password); err == nil {
+		return true, dbv.Labels, nil
+	}
+
 	orgs, err := gta.fetchUserOrgs(user, string(password))
 	if err != nil {
 		return false, nil, err
-	}
-
-	if err != nil {
-		return false, nil, fmt.Errorf("could not hash password: %s", err)
 	}
 
 	var groups []string
@@ -116,6 +176,10 @@ func (gta *GiteaAuth) Authenticate(user string, password api.PasswordString) (bo
 
 	labels := api.Labels{
 		"group": groups,
+	}
+
+	if err := gta.storeToken(user, password, labels); err != nil {
+		return false, nil, err
 	}
 
 	return true, labels, nil

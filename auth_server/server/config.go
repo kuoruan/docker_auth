@@ -273,11 +273,15 @@ func validate(c *Config) error {
 	}
 
 	if gtac := c.GiteaAuth; gtac != nil {
-		if gtac.ApiUri == "" {
-			return errors.New("gitea_auth.api_uri is required")
+		if gtac.TokenDB == "" {
+			return errors.New("gitea_auth.token_db is required")
 		}
 		if gtac.HTTPTimeout <= 0 {
 			gtac.HTTPTimeout = time.Duration(10 * time.Second)
+		}
+		if gtac.RevalidateAfter == 0 {
+			// Token expires after 1 hour by default
+			gtac.RevalidateAfter = time.Duration(1 * time.Hour)
 		}
 	}
 
