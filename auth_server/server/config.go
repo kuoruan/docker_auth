@@ -71,7 +71,7 @@ type ServerConfig struct {
 
 	publicKey  libtrust.PublicKey
 	privateKey libtrust.PrivateKey
-	sigAlg string
+	sigAlg     string
 }
 
 type LetsEncryptConfig struct {
@@ -88,7 +88,7 @@ type TokenConfig struct {
 
 	publicKey  libtrust.PublicKey
 	privateKey libtrust.PrivateKey
-	sigAlg string
+	sigAlg     string
 }
 
 // TLSCipherSuitesValues maps CipherSuite names as strings to the actual values
@@ -195,7 +195,7 @@ func validate(c *Config) error {
 			}
 			gac.ClientSecret = strings.TrimSpace(string(contents))
 		}
-		if gac.ClientId == "" || gac.ClientSecret == "" || (gac.LevelTokenDB != nil && (gac.GCSTokenDB == nil && gac.RedisTokenDB == nil)) {
+		if gac.ClientId == "" || gac.ClientSecret == "" || (gac.LevelTokenDB == nil && gac.GCSTokenDB == nil && gac.RedisTokenDB == nil) {
 			return errors.New("google_auth.{client_id,client_secret,token_db} are required")
 		}
 
@@ -219,7 +219,7 @@ func validate(c *Config) error {
 			}
 			ghac.ClientSecret = strings.TrimSpace(string(contents))
 		}
-		if ghac.ClientId == "" || ghac.ClientSecret == "" || (ghac.LevelTokenDB != nil && (ghac.GCSTokenDB == nil && ghac.RedisTokenDB == nil)) {
+		if ghac.ClientId == "" || ghac.ClientSecret == "" || (ghac.LevelTokenDB == nil && ghac.GCSTokenDB == nil && ghac.RedisTokenDB == nil) {
 			return errors.New("github_auth.{client_id,client_secret,token_db} are required")
 		}
 
@@ -247,7 +247,7 @@ func validate(c *Config) error {
 			}
 			oidc.ClientSecret = strings.TrimSpace(string(contents))
 		}
-		if oidc.ClientId == "" || oidc.ClientSecret == "" || oidc.Issuer == "" || oidc.RedirectURL == "" || (oidc.LevelTokenDB != nil && (oidc.GCSTokenDB == nil && oidc.RedisTokenDB == nil)) {
+		if oidc.ClientId == "" || oidc.ClientSecret == "" || oidc.Issuer == "" || oidc.RedirectURL == "" || (oidc.LevelTokenDB == nil && oidc.GCSTokenDB == nil && oidc.RedisTokenDB == nil) {
 			return errors.New("oidc_auth.{issuer,redirect_url,client_id,client_secret,token_db} are required")
 		}
 
@@ -277,7 +277,7 @@ func validate(c *Config) error {
 			}
 			glab.ClientSecret = strings.TrimSpace(string(contents))
 		}
-		if glab.ClientId == "" || glab.ClientSecret == "" || (glab.LevelTokenDB != nil && (glab.GCSTokenDB == nil && glab.RedisTokenDB == nil)) {
+		if glab.ClientId == "" || glab.ClientSecret == "" || (glab.LevelTokenDB == nil && glab.GCSTokenDB == nil && glab.RedisTokenDB == nil) {
 			return errors.New("gitlab_auth.{client_id,client_secret,token_db} are required")
 		}
 
@@ -299,9 +299,18 @@ func validate(c *Config) error {
 	}
 
 	if gtac := c.GiteaAuth; gtac != nil {
-		if gtac.TokenDB == "" {
+		if gtac.LevelTokenDB == nil && gtac.GCSTokenDB == nil && gtac.RedisTokenDB == nil {
 			return errors.New("gitea_auth.token_db is required")
 		}
+
+		if gtac.GCSTokenDB != nil && (gtac.GCSTokenDB.Bucket == "" || gtac.GCSTokenDB.ClientSecretFile == "") {
+			return errors.New("gitea_auth.gcs_token_db{bucket,client_secret_file} are required")
+		} else if gtac.RedisTokenDB != nil && gtac.RedisTokenDB.ClientOptions == nil && gtac.RedisTokenDB.ClusterOptions == nil {
+			return errors.New("gitea_auth.redis_token_db.{redis_options,redis_cluster_options} are required")
+		} else if gtac.LevelTokenDB != nil && gtac.LevelTokenDB.Path == "" {
+			return errors.New("gitea_auth.level_token_db.path is required")
+		}
+
 		if gtac.HTTPTimeout <= 0 {
 			gtac.HTTPTimeout = time.Duration(10 * time.Second)
 		}

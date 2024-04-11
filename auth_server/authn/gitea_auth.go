@@ -24,14 +24,17 @@ import (
 	"time"
 
 	"github.com/cesanta/docker_auth/auth_server/api"
+	"github.com/cesanta/glog"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type GiteaAuthConfig struct {
-	ApiUri          string        `yaml:"api_uri,omitempty"`
-	TokenDB         string        `yaml:"token_db,omitempty"`
-	HTTPTimeout     time.Duration `yaml:"http_timeout,omitempty"`
-	RevalidateAfter time.Duration `yaml:"revalidate_after,omitempty"`
+	GiteaApiUri     string              `yaml:"gitea_api_uri,omitempty"`
+	LevelTokenDB    *LevelDBStoreConfig `yaml:"level_token_db,omitempty"`
+	GCSTokenDB      *GCSStoreConfig     `yaml:"gcs_token_db,omitempty"`
+	RedisTokenDB    *RedisStoreConfig   `yaml:"redis_token_db,omitempty"`
+	HTTPTimeout     time.Duration       `yaml:"http_timeout,omitempty"`
+	RevalidateAfter time.Duration       `yaml:"revalidate_after,omitempty"`
 }
 
 type GiteaAuth struct {
@@ -53,10 +56,27 @@ type GiteaOrganization struct {
 }
 
 func NewGiteaAuth(c *GiteaAuthConfig) (*GiteaAuth, error) {
-	db, err := NewTokenDB(c.TokenDB)
+	var db TokenDB
+	var err error
+	var dbName string
+
+	switch {
+	case c.GCSTokenDB != nil:
+		db, err = NewGCSTokenDB(c.GCSTokenDB)
+		dbName = "GCS: " + c.GCSTokenDB.Bucket
+	case c.RedisTokenDB != nil:
+		db, err = NewRedisTokenDB(c.RedisTokenDB)
+		dbName = db.(*redisTokenDB).String()
+	default:
+		db, err = NewTokenDB(c.LevelTokenDB)
+		dbName = c.LevelTokenDB.Path
+	}
+
 	if err != nil {
 		return nil, err
 	}
+
+	glog.Infof("Gitea auth token DB at %s", dbName)
 
 	return &GiteaAuth{
 		config: c,
@@ -65,16 +85,16 @@ func NewGiteaAuth(c *GiteaAuthConfig) (*GiteaAuth, error) {
 	}, nil
 }
 
-func (gta *GiteaAuth) getApiUri() string {
-	if gta.config.ApiUri != "" {
-		return gta.config.ApiUri
+func (gta *GiteaAuth) getGiteaApiUri() string {
+	if gta.config.GiteaApiUri != "" {
+		return gta.config.GiteaApiUri
 	} else {
 		return "https://gitea.com/api"
 	}
 }
 
 func (gta *GiteaAuth) fetchUserOrgs(user string, password string) ([]*GiteaOrganization, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/v1/user/orgs", gta.getApiUri()), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/v1/user/orgs", gta.getGiteaApiUri()), nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not create request to gitea api: %s", err)
 	}
