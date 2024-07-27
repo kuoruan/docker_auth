@@ -72,7 +72,6 @@ type ServerConfig struct {
 	publicKey  libtrust.PublicKey
 	privateKey libtrust.PrivateKey
 	sigAlg     string
-	sigAlg     string
 }
 
 type LetsEncryptConfig struct {
