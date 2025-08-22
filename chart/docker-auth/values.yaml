@@ -6,7 +6,7 @@ replicaCount: 1
 
 image:
   repository: cesanta/docker_auth
-  tag: 1.11.0
+  tag: 1.14.0
   pullPolicy: IfNotPresent
 
 registry:
@@ -25,6 +25,7 @@ configmap:
     token:
       issuer: "Acme auth server"
       expiration: 900
+      disableLegacyKeyId: false
     users:
       "admin":
         password: "$2y$05$LO.vzwpWC5LZGqThvEfznu8qhb5SGqvBSWY1J3yZ4AxtMRZ3kN5jC"  # password: badmin
@@ -48,14 +49,17 @@ service:
 
 ingress:
   enabled: true
+  className: ""
   annotations: {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  labels: {}
   hosts:
     - host: docker-auth.test.com
       paths:
-        - /
-
+        - path: /
+          pathType: Prefix
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:
